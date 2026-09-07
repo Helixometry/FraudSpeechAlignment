@@ -25,7 +25,6 @@
         (bank, lottery, kidnapping, phishing, etc.) purely to help build and
         evaluate <em>fraud-detection</em> systems.
       </p>
-      <div class="stats" id="stats"></div>
     </header>
 
     <div class="filters" id="filters"></div>
@@ -68,17 +67,6 @@
 
     const grid = document.getElementById("grid");
     const filtersEl = document.getElementById("filters");
-    const statsEl = document.getElementById("stats");
-
-    function renderStats() {
-      const byCategory = {};
-      CLIPS.forEach(c => byCategory[c.category] = (byCategory[c.category] || 0) + 1);
-      statsEl.innerHTML = `
-        <div class="stat"><div class="num">${CLIPS.length}</div><div class="label">Samples</div></div>
-        <div class="stat"><div class="num">${Object.keys(byCategory).length}</div><div class="label">Categories</div></div>
-        <div class="stat"><div class="num">100%</div><div class="label">Fraud-labelled</div></div>
-      `;
-    }
 
     function renderFilters() {
       const cats = ["all", ...Object.keys(CATEGORY_META)];
@@ -119,7 +107,6 @@
       }).join("");
     }
 
-    renderStats();
     renderFilters();
     renderGrid();
   </script>
