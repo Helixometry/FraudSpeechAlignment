@@ -1,34 +1,23 @@
 #!/usr/bin/env python
 """
-Multi-turn TTS backend using AI4Bharat Indic-Parler-TTS (natural, expressive Hindi).
-Same orchestration as tts_synthesize.py (per-turn synth -> concatenate), but voices are
-controlled by description prompts with consistent named speakers (Rohit=caller/male,
-Divya=callee/female) so the call sounds spoken, not read.
+Multi-turn TTS with AI4Bharat Indic-Parler-TTS, BATCHED per call for speed:
+all turns of a dialogue are synthesized in ONE batched model.generate() call
+(~14x fewer calls than per-turn), then concatenated. Gender-matched, rotated named
+speakers (Rohit/Aman male, Divya/Rani female). Resume-safe (skips done clips).
 
-Run (in the `fraudparler` env, on a GPU):
-  python scripts/tts_parler.py --lang hi --dialogues out/hi/dialogues_sample6.json \
-      --audio-root /users/msingh/sharedscratch/TeleAntiFraud_hi_parler
+Run (fraudparler env, GPU; HF_TOKEN set for the gated model):
+  python scripts/tts_parler.py --lang hi --dialogues out/hi/dialogues_full.json \
+      --audio-root /users/msingh/sharedscratch/TeleAntiFraud_hi --shard 0 --nshards 2
 """
-import argparse, json, os, tempfile
+import argparse, json, os, re, tempfile
 
 MODEL = "ai4bharat/indic-parler-tts"
-
-# Named Hindi speakers per gender (rotated across calls for speaker variety).
 MALE_VOICES = ["Rohit", "Aman"]
 FEMALE_VOICES = ["Divya", "Rani"]
-
-# Role-specific manner (fixes the flat "reading" feel); {v} = chosen speaker name.
 CALLER_STYLE = ("{v} speaks in an expressive, persuasive and confident tone at a slightly fast "
                 "pace, sounding reassuring. The recording is very clear and close-sounding.")
 CALLEE_STYLE = ("{v} speaks in an expressive, slightly anxious and hesitant tone at a moderate "
                 "pace. The recording is very clear and close-sounding.")
-
-
-def pick_voice(gender, idx):
-    """Deterministically rotate a same-gender named speaker for variety across calls."""
-    pool = FEMALE_VOICES if str(gender).lower().startswith("f") else MALE_VOICES
-    return pool[idx % len(pool)]
-
 _HI_DIGITS = {"0": "शून्य", "1": "एक", "2": "दो", "3": "तीन", "4": "चार",
               "5": "पाँच", "6": "छह", "7": "सात", "8": "आठ", "9": "नौ"}
 
@@ -40,21 +29,27 @@ def preprocess(text, lang):
     return text
 
 
+def pick_voice(gender, idx):
+    pool = FEMALE_VOICES if str(gender).lower().startswith("f") else MALE_VOICES
+    return pool[idx % len(pool)]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dialogues", required=True)
     ap.add_argument("--lang", default="hi")
-    ap.add_argument("--audio-root", default="/users/msingh/sharedscratch/TeleAntiFraud_hi_parler")
+    ap.add_argument("--audio-root", default="/users/msingh/sharedscratch/TeleAntiFraud_hi")
     ap.add_argument("--subdir", default=None)
     ap.add_argument("--pause-ms", type=int, default=350)
     ap.add_argument("--out", default=None)
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--nshards", type=int, default=1)
+    ap.add_argument("--max-batch", type=int, default=20, help="cap turns per generate call")
     args = ap.parse_args()
     if args.subdir is None:
         args.subdir = f"NEG-gen-{args.lang}"
 
-    import torch, soundfile as sf, numpy as np
+    import numpy as np, torch, soundfile as sf
     from parler_tts import ParlerTTSForConditionalGeneration
     from transformers import AutoTokenizer
     from pydub import AudioSegment
@@ -65,53 +60,60 @@ def main():
     tok = AutoTokenizer.from_pretrained(MODEL)
     desc_tok = AutoTokenizer.from_pretrained(model.config.text_encoder._name_or_path)
     sr = model.config.sampling_rate
-
-    def enc_desc(text):
-        return desc_tok(text, return_tensors="pt").to(dev)
+    pause = np.zeros(int(args.pause_ms / 1000 * sr), dtype=np.float32)
 
     dialogues = json.load(open(args.dialogues))
     if args.nshards > 1:
         dialogues = [d for i, d in enumerate(dialogues) if i % args.nshards == args.shard]
-    pause = AudioSegment.silent(duration=args.pause_ms)
     root = os.path.join(args.audio_root, "audio", args.subdir)
 
-    def synth(text, desc_enc, path_wav):
-        p = tok(preprocess(text, args.lang), return_tensors="pt").to(dev)
+    def trim(a, thr=0.01, pad_ms=60):
+        idx = np.where(np.abs(a) > thr)[0]
+        if len(idx) == 0:
+            return a[: int(0.08 * sr)]
+        return a[: min(len(a), idx[-1] + int(pad_ms / 1000 * sr))]
+
+    def synth_batch(descs, prompts):
+        di = desc_tok(descs, return_tensors="pt", padding=True).to(dev)
+        pi = tok(prompts, return_tensors="pt", padding=True).to(dev)
         with torch.no_grad():
-            gen = model.generate(input_ids=desc_enc.input_ids, attention_mask=desc_enc.attention_mask,
-                                 prompt_input_ids=p.input_ids, prompt_attention_mask=p.attention_mask)
-        sf.write(path_wav, gen.cpu().numpy().squeeze().astype("float32"), sr)
-        return AudioSegment.from_wav(path_wav)
+            gen = model.generate(input_ids=di.input_ids, attention_mask=di.attention_mask,
+                                 prompt_input_ids=pi.input_ids, prompt_attention_mask=pi.attention_mask)
+        arr = gen.cpu().numpy()
+        if arr.ndim == 3:
+            arr = arr.squeeze(1)
+        return [trim(arr[k].astype("float32")) for k in range(arr.shape[0])]
 
     done = 0
-    for idx, dlg in enumerate(dialogues):
-        did = dlg["id"]; cdir = os.path.join(root, did); os.makedirs(cdir, exist_ok=True)
-        # resume: skip clips already synthesized (survives GPU/hold restarts)
-        _mp3 = os.path.join(cdir, f"{did}.mp3")
-        if os.path.exists(_mp3) and os.path.getsize(_mp3) > 2000:
-            dlg["audio"] = os.path.join("audio", args.subdir, did, f"{did}.mp3")
-            done += 1
-            continue
-        # gender-matched, rotated voices; consistent within this call
-        caller_v = pick_voice(dlg.get("caller_gender", "male"), idx)
-        callee_v = pick_voice(dlg.get("callee_gender", "female"), idx)
-        desc_enc = {
-            "caller": enc_desc(CALLER_STYLE.format(v=caller_v)),
-            "callee": enc_desc(CALLEE_STYLE.format(v=callee_v)),
-        }
-        call = AudioSegment.silent(duration=0)
-        with tempfile.TemporaryDirectory() as tmp:
-            for i, t in enumerate(dlg["turns"]):
-                txt = (t.get("text") or "").strip()
-                if not txt:
-                    continue
-                role = "caller" if t.get("speaker") == "caller" else "callee"
-                call += synth(txt, desc_enc[role], os.path.join(tmp, f"{i}.wav")) + pause
-        mp3 = os.path.join(cdir, f"{did}.mp3")
-        call.export(mp3, format="mp3", bitrate="64k")
+    for dlg in dialogues:
+        did = dlg["id"]; cdir = os.path.join(root, did); mp3 = os.path.join(cdir, f"{did}.mp3")
+        if os.path.exists(mp3) and os.path.getsize(mp3) > 2000:   # resume
+            dlg["audio"] = os.path.join("audio", args.subdir, did, f"{did}.mp3"); done += 1; continue
+        os.makedirs(cdir, exist_ok=True)
+        n = int(re.findall(r"\d+", did)[-1]) if re.findall(r"\d+", did) else done
+        cv, ev = pick_voice(dlg.get("caller_gender", "male"), n), pick_voice(dlg.get("callee_gender", "female"), n)
+        descs, prompts = [], []
+        for t in dlg["turns"]:
+            txt = (t.get("text") or "").strip()
+            if not txt:
+                continue
+            style = CALLER_STYLE if t.get("speaker") == "caller" else CALLEE_STYLE
+            descs.append(style.format(v=cv if t.get("speaker") == "caller" else ev))
+            prompts.append(preprocess(txt, args.lang))
+        # batch the clip's turns (split if above cap)
+        segs = []
+        for i in range(0, len(prompts), args.max_batch):
+            segs += synth_batch(descs[i:i + args.max_batch], prompts[i:i + args.max_batch])
+        pieces = []
+        for s in segs:
+            pieces.append(s); pieces.append(pause)
+        final = np.concatenate(pieces) if pieces else np.zeros(int(0.1 * sr), dtype="float32")
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tw:
+            sf.write(tw.name, final, sr)
+            AudioSegment.from_wav(tw.name).export(mp3, format="mp3", bitrate="64k")
         dlg["audio"] = os.path.join("audio", args.subdir, did, f"{did}.mp3")
         done += 1
-        print(f"[parler] {done}/{len(dialogues)}  {did}  ({len(call)/1000:.1f}s)", flush=True)
+        print(f"[parler] {done}/{len(dialogues)}  {did}  ({len(final)/sr:.1f}s)", flush=True)
 
     out = args.out or args.dialogues.replace(".json", "_withaudio.json")
     json.dump(dialogues, open(out, "w"), ensure_ascii=False, indent=2)
