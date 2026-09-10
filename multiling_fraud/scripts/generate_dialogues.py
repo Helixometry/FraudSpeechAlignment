@@ -16,10 +16,25 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.taxonomy import distribute
 from config.languages import get_language
 
-PROMPT = """You are helping build a *fraud-detection research dataset* used to TRAIN models that PROTECT people from telecom scams. Write ONE realistic {language_name} phone-call transcript that is an example of **{fraud_label}** ({scene} scene), so detectors can learn to recognise how victims actually get manipulated.
+# One-line scenario per fraud type so the CONTENT is correct (esp. kidnapping, which the
+# model otherwise turned into a generic customer-service scam).
+SCENARIO_HINTS = {
+    "customer_service": "poses as a company's customer-support agent (fake refund, account problem, remote-access app, or verification) and manipulates the victim into paying or sharing credentials",
+    "bank": "poses as the victim's bank fraud/security team about suspicious activity and gets the victim to reveal a one-time code / card details or move money to a 'safe account'",
+    "investment": "offers a fake high-return investment or scheme and pressures the victim to transfer money quickly",
+    "phishing": "claims the victim's account is compromised and pushes them to a fake link / verification to capture their login and one-time code",
+    "lottery": "claims the victim has won a lottery/prize and must pay a fee or tax up front to release the winnings",
+    "kidnapping": "FALSELY claims to have kidnapped or detained the victim's relative and demands an urgent ransom, forbidding any contact with police (a 'virtual kidnapping' extortion) — this is NOT a customer-service call",
+    "identity_theft": "poses as an official (tax office / government / utility) and, under threat of a penalty, pressures the victim to hand over personal identifiers (date of birth, ID/Aadhaar number, address)",
+}
+
+PROMPT = """You are helping build a *fraud-detection research dataset* used to TRAIN models that PROTECT people from telecom scams. Write ONE realistic {language_name} phone-call transcript that is an example of **{fraud_label}**.
+
+Scenario: the caller {scenario}.
 
 Rules:
 - Two speakers only: "caller" (the fraudster) and "callee" (the target). Natural spoken {language_name}, {min_turns}-{max_turns} turns, alternating, starting with the caller.
+- Give each speaker a definite gender and keep names + (in gendered languages) grammar consistent with it. The caller and callee may each be male or female — vary this naturally across calls.
 - IMPORTANT — the callee is an ordinary, TRUSTING person who does NOT see through the scam. They are polite and a little anxious or excited, ask only normal everyday questions, and are gradually persuaded so the scam realistically PROGRESSES and they begin to comply (this is an at-risk/negative example). Do not make the callee a savvy sceptic who instantly refuses.
 - The caller uses common, well-known social-engineering pressure: authority, fear, urgency, reassurance, flattery, isolation. Keep to widely-known tactics; do NOT invent novel techniques or a reusable step-by-step method that would materially help someone defeat real security controls.
 - Use ONLY fake names, companies and numbers. No real institutions, no real personal data, no real working links/apps/phone numbers. The transcript is illustrative for DETECTION, not an operational how-to; you may show the victim starting to comply but do not narrate completed financial theft in operational detail.
@@ -27,6 +42,8 @@ Rules:
 Return STRICT JSON only (no markdown fence), with EXACTLY these keys:
 {{
   "turns": [{{"speaker": "caller", "text": "..."}}, {{"speaker": "callee", "text": "..."}}, ...],
+  "caller_gender": "male" or "female",
+  "callee_gender": "male" or "female",
   "scene": one of {scenes},
   "scene_reason": "why the call superficially looks like this scene",
   "scene_confidence": float 0-1,
@@ -47,7 +64,7 @@ def build_prompts(counts, pack, min_turns, max_turns):
             p = PROMPT.format(
                 language_name=pack.LANGUAGE_NAME,
                 fraud_label=label,
-                scene=pack.SCENE_DEFAULT[key],
+                scenario=SCENARIO_HINTS[key],
                 scenes=json.dumps(pack.SCENES, ensure_ascii=False),
                 min_turns=min_turns, max_turns=max_turns,
             )
@@ -145,6 +162,10 @@ def main():
         key = it["key"]
         per_type[key] = per_type.get(key, 0) + 1
         did = f"{args.lang}_{key}_{per_type[key]:05d}"
+        obj.setdefault("caller_gender", "male")
+        obj.setdefault("callee_gender", "female")
+        obj["caller_gender"] = "female" if str(obj.get("caller_gender")).lower().startswith("f") else "male"
+        obj["callee_gender"] = "female" if str(obj.get("callee_gender")).lower().startswith("f") else "male"
         obj.update({
             "id": did, "language": args.lang,
             "fraud_type": it["fraud_label"], "fraud_type_key": key, "is_fraud": True,
