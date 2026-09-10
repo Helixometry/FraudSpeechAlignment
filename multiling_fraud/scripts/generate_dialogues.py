@@ -63,16 +63,16 @@ def extract_json(text):
     return json.loads(m.group(0)) if m else None
 
 
-def gen_vllm(model, prompts, max_model_len, seed):
+def gen_vllm(model, prompts, max_model_len, seed, max_tokens=1500):
     from vllm import LLM, SamplingParams
     llm = LLM(model=model, max_model_len=max_model_len,
               gpu_memory_utilization=0.92, seed=seed,
               quantization="awq" if "AWQ" in model else None)
-    sp = SamplingParams(temperature=0.9, top_p=0.95, max_tokens=1500, seed=seed)
+    sp = SamplingParams(temperature=0.9, top_p=0.95, max_tokens=max_tokens, seed=seed)
     return [o.outputs[0].text for o in llm.generate(prompts, sp)]
 
 
-def gen_hf(model, tok, prompts, batch_size=8):
+def gen_hf(model, tok, prompts, batch_size=8, max_tokens=1500):
     """transformers backend — robust on MIG slices where vLLM mis-profiles memory."""
     import torch
     from transformers import AutoModelForCausalLM
@@ -86,7 +86,7 @@ def gen_hf(model, tok, prompts, batch_size=8):
         chunk = prompts[i:i + batch_size]
         enc = tok(chunk, return_tensors="pt", padding=True).to("cuda")
         with torch.no_grad():
-            out = m.generate(**enc, max_new_tokens=1500, do_sample=True,
+            out = m.generate(**enc, max_new_tokens=max_tokens, do_sample=True,
                              temperature=0.9, top_p=0.95, pad_token_id=tok.pad_token_id)
         for j in range(out.shape[0]):
             gen = out[j, enc["input_ids"].shape[1]:]
@@ -106,11 +106,13 @@ def main():
     ap.add_argument("--min-turns", type=int, default=10)
     ap.add_argument("--max-turns", type=int, default=16)
     ap.add_argument("--max-model-len", type=int, default=4096)
+    ap.add_argument("--max-new-tokens", type=int, default=1500, help="raise if outputs truncate (JSON parse fails)")
+    ap.add_argument("--only-type", default=None, help="generate ONLY this fraud-type key (top-up); --n = count")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
     pack = get_language(args.lang)
-    counts = distribute(args.n)
+    counts = {args.only_type: args.n} if args.only_type else distribute(args.n)
     print(f"[gen] lang={args.lang} backend={args.backend} model={args.model} distribution: {counts}", flush=True)
     items = build_prompts(counts, pack, args.min_turns, args.max_turns)
 
@@ -118,8 +120,8 @@ def main():
     tok = AutoTokenizer.from_pretrained(args.model)
     prompts = [tok.apply_chat_template([{"role": "user", "content": it["prompt"]}],
                                        tokenize=False, add_generation_prompt=True) for it in items]
-    gen_texts = (gen_vllm(args.model, prompts, args.max_model_len, args.seed)
-                 if args.backend == "vllm" else gen_hf(args.model, tok, prompts))
+    gen_texts = (gen_vllm(args.model, prompts, args.max_model_len, args.seed, args.max_new_tokens)
+                 if args.backend == "vllm" else gen_hf(args.model, tok, prompts, max_tokens=args.max_new_tokens))
 
     dialogues, per_type = [], {}
     for it, text in zip(items, gen_texts):
