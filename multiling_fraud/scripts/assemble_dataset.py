@@ -13,9 +13,7 @@ Run (login node is fine, pure python):
 """
 import argparse, json, os, random, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config.templates_en import (
-    build_binary_record, build_scene_sft, build_fraud_sft, build_fraud_type_sft,
-)
+from config.languages import get_language
 
 
 def clean(s):
@@ -25,10 +23,17 @@ def clean(s):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dialogues", required=True, help="dialogues file WITH audio paths")
+    ap.add_argument("--lang", default="en", help="language pack code (config/languages/<lang>.py)")
     ap.add_argument("--out-root", default="/users/msingh/sharedscratch/TeleAntiFraud_en")
     ap.add_argument("--test-frac", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
+
+    T = get_language(args.lang).templates
+    build_binary_record = T.build_binary_record
+    build_scene_sft = T.build_scene_sft
+    build_fraud_sft = T.build_fraud_sft
+    build_fraud_type_sft = T.build_fraud_type_sft
 
     dialogues = json.load(open(args.dialogues))
     dialogues = [d for d in dialogues if d.get("audio")]  # need audio
@@ -66,7 +71,7 @@ def main():
 
     # manifest
     manifest = {
-        "language": "en", "class": "fraud-only", "dialogues": len(dialogues),
+        "language": args.lang, "class": "fraud-only", "dialogues": len(dialogues),
         "train_dialogues": len(train), "test_dialogues": len(test),
     }
     json.dump(manifest, open(os.path.join(args.out_root, "dataset_manifest.json"), "w"), indent=2)

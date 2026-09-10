@@ -13,12 +13,13 @@ Run (on the A100 node, inside the `fraudgen` env):
 """
 import argparse, json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config.taxonomy import distribute, BY_KEY, DEFAULT_SCENE_FOR_TYPE, SCENES_EN
+from config.taxonomy import distribute
+from config.languages import get_language
 
-PROMPT = """You are helping build a *fraud-detection research dataset* used to TRAIN models that PROTECT people from telecom scams. Write ONE realistic English phone-call transcript that is an example of **{fraud_en}** ({scene} scene), so detectors can learn to recognise how victims actually get manipulated.
+PROMPT = """You are helping build a *fraud-detection research dataset* used to TRAIN models that PROTECT people from telecom scams. Write ONE realistic {language_name} phone-call transcript that is an example of **{fraud_label}** ({scene} scene), so detectors can learn to recognise how victims actually get manipulated.
 
 Rules:
-- Two speakers only: "caller" (the fraudster) and "callee" (the target). Natural spoken English, {min_turns}-{max_turns} turns, alternating, starting with the caller.
+- Two speakers only: "caller" (the fraudster) and "callee" (the target). Natural spoken {language_name}, {min_turns}-{max_turns} turns, alternating, starting with the caller.
 - IMPORTANT — the callee is an ordinary, TRUSTING person who does NOT see through the scam. They are polite and a little anxious or excited, ask only normal everyday questions, and are gradually persuaded so the scam realistically PROGRESSES and they begin to comply (this is an at-risk/negative example). Do not make the callee a savvy sceptic who instantly refuses.
 - The caller uses common, well-known social-engineering pressure: authority, fear, urgency, reassurance, flattery, isolation. Keep to widely-known tactics; do NOT invent novel techniques or a reusable step-by-step method that would materially help someone defeat real security controls.
 - Use ONLY fake names, companies and numbers. No real institutions, no real personal data, no real working links/apps/phone numbers. The transcript is illustrative for DETECTION, not an operational how-to; you may show the victim starting to comply but do not narrate completed financial theft in operational detail.
@@ -32,24 +33,25 @@ Return STRICT JSON only (no markdown fence), with EXACTLY these keys:
   "fraud_reason": "why this call IS fraud (red flags)",
   "fraud_confidence": float 0-1,
   "think": "short analysis of the tactics used",
-  "fraud_type_reason": "why the fraud type is {fraud_en}",
+  "fraud_type_reason": "why the fraud type is {fraud_label}",
   "fraud_type_confidence": float 0-1
 }}
 """
 
 
-def build_prompts(counts, min_turns, max_turns):
+def build_prompts(counts, pack, min_turns, max_turns):
     items = []
     for key, n in counts.items():
-        t = BY_KEY[key]
+        label = pack.FRAUD_LABELS[key]
         for _ in range(n):
             p = PROMPT.format(
-                fraud_en=t["en"],
-                scene=DEFAULT_SCENE_FOR_TYPE[key],
-                scenes=json.dumps(SCENES_EN),
+                language_name=pack.LANGUAGE_NAME,
+                fraud_label=label,
+                scene=pack.SCENE_DEFAULT[key],
+                scenes=json.dumps(pack.SCENES, ensure_ascii=False),
                 min_turns=min_turns, max_turns=max_turns,
             )
-            items.append({"key": key, "fraud_en": t["en"], "prompt": p})
+            items.append({"key": key, "fraud_label": label, "prompt": p})
     return items
 
 
@@ -96,6 +98,7 @@ def gen_hf(model, tok, prompts, batch_size=8):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=50)
+    ap.add_argument("--lang", default="en", help="language pack code (config/languages/<lang>.py)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--model", default=os.environ.get("FRAUD_LLM", "Qwen/Qwen2.5-72B-Instruct-AWQ"))
     ap.add_argument("--backend", choices=["vllm", "hf"], default="vllm",
@@ -106,9 +109,10 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
+    pack = get_language(args.lang)
     counts = distribute(args.n)
-    print(f"[gen] backend={args.backend} model={args.model} distribution: {counts}", flush=True)
-    items = build_prompts(counts, args.min_turns, args.max_turns)
+    print(f"[gen] lang={args.lang} backend={args.backend} model={args.model} distribution: {counts}", flush=True)
+    items = build_prompts(counts, pack, args.min_turns, args.max_turns)
 
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(args.model)
@@ -128,10 +132,10 @@ def main():
             continue
         key = it["key"]
         per_type[key] = per_type.get(key, 0) + 1
-        did = f"en_{key}_{per_type[key]:05d}"
+        did = f"{args.lang}_{key}_{per_type[key]:05d}"
         obj.update({
-            "id": did, "language": "en",
-            "fraud_type": it["fraud_en"], "fraud_type_key": key, "is_fraud": True,
+            "id": did, "language": args.lang,
+            "fraud_type": it["fraud_label"], "fraud_type_key": key, "is_fraud": True,
         })
         dialogues.append(obj)
 

@@ -34,9 +34,10 @@ mkdir -p "$CONDA_PKGS_DIRS" "$CONDA_ENVS_PATH" "$HF_HOME"
 GEN="$CONDA_ENVS_PATH/fraudgen"; TTS="$CONDA_ENVS_PATH/fraudtts"
 PROJ=/users/msingh/Girish/FraudAlignALM/multiling_fraud
 MODEL="${FRAUD_LLM:-Qwen/Qwen2.5-72B-Instruct-AWQ}"
-DIAL="out/dialogues_${TAG}.json"
-WITHAUDIO="out/dialogues_${TAG}_withaudio.json"
-cd "$PROJ"
+LANG_CODE="${4:-en}"
+DIAL="out/${LANG_CODE}/dialogues_${TAG}.json"
+WITHAUDIO="out/${LANG_CODE}/dialogues_${TAG}_withaudio.json"
+cd "$PROJ"; mkdir -p "out/${LANG_CODE}"
 
 # --- ensure fraudgen (vLLM) ---
 if [ ! -d "$GEN" ]; then
@@ -63,14 +64,14 @@ if [ -x "$GEN/lib/python3.10/site-packages/nvidia/cu13/bin/nvcc" ]; then
   export CUDA_HOME="$GEN/lib/python3.10/site-packages/nvidia/cu13"
   export PATH="$CUDA_HOME/bin:$PATH"
 fi
-python scripts/generate_dialogues.py --n "$N" --backend vllm --model "$MODEL" --out "$DIAL"
+python scripts/generate_dialogues.py --lang "$LANG_CODE" --n "$N" --backend vllm --model "$MODEL" --out "$DIAL"
 conda deactivate
 
 echo "### Stage 2: TTS synthesis (2-voice multi-turn)"
 conda activate "$TTS"
-python scripts/tts_synthesize.py --dialogues "$DIAL" --audio-root "$OUTROOT" --out "$WITHAUDIO"
+python scripts/tts_synthesize.py --lang "$LANG_CODE" --dialogues "$DIAL" --audio-root "$OUTROOT" --out "$WITHAUDIO"
 
 echo "### Stage 3: assemble dataset"
-python scripts/assemble_dataset.py --dialogues "$WITHAUDIO" --out-root "$OUTROOT"
+python scripts/assemble_dataset.py --lang "$LANG_CODE" --dialogues "$WITHAUDIO" --out-root "$OUTROOT"
 conda deactivate
 echo "[job] DONE $(date). dataset -> $OUTROOT ; dialogues -> $PROJ/$DIAL"

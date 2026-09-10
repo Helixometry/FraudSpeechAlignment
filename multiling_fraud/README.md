@@ -42,24 +42,33 @@ multiling_fraud/
 ├── README.md                     this file
 ├── PIPELINE.md                   full pipeline + how the Chinese dataset is used
 ├── config/
-│   ├── taxonomy.py               7 fraud types (+original weights), 7 scenes, N-distribution
-│   └── templates_en.py           English task templates + original-schema record builders
-├── scripts/
+│   ├── taxonomy.py               SHARED: 7 fraud-type keys + original weights + N-distribution
+│   ├── templates_en.py           English task templates + original-schema record builders
+│   └── languages/
+│       ├── __init__.py           get_language(code) loader
+│       └── en.py                 English pack: language name, scenes, labels, TTS voices
+├── scripts/                      (all take --lang, default en)
 │   ├── generate_dialogues.py     Stage 1 — LLM → dialogues + annotations (vllm | hf backends)
 │   ├── tts_synthesize.py         Stage 2 — XTTS-v2, 2-voice, multi-turn (shardable: --shard/--nshards)
 │   ├── assemble_dataset.py       Stage 3 — emit original schema, train/test split
 │   ├── env_setup.sh              build the two conda envs (fraudgen=vLLM, fraudtts=XTTS-v2)
-│   ├── gen_only.sh               generate ALL dialogues (text only) — Phase 1a
-│   ├── run_full_fast.sh          full run with parallel TTS workers (generate→TTS→assemble)
-│   ├── job_tts_assemble.sh       Stage 2+3 on a given dialogues file (audio phase)
+│   ├── gen_only.sh <lang> <N>    generate ALL dialogues (text only) — Phase 1a
+│   ├── run_full_fast.sh <lang> <N> <workers>   full run w/ parallel TTS (reuses dialogues if present)
 │   ├── job_pilot_a100.sh         one-shot full pipeline on a whole A100
 │   ├── job_hold_and_run.sh       persistent 3-day A100 hold (auto-runs validation, then holds)
 │   └── job_hold_and_run_h100.sh  same, for H100
-└── out/                          generated dialogues (dialogues_full.json) — the single source of truth
+└── out/
+    └── <lang>/dialogues_full.json    per-language dialogues — the single source of truth
 ```
 
-Output dataset → `/users/msingh/sharedscratch/TeleAntiFraud_en/`
-(`binary_classification/`, `sft/`, `audio/NEG-gen-en/…`, `dataset_manifest.json`).
+Per-language output dataset → `/users/msingh/sharedscratch/TeleAntiFraud_<lang>/`
+(`binary_classification/`, `sft/`, `audio/NEG-gen-<lang>/…`, `dataset_manifest.json`).
+
+### Adding a new language
+
+1. Add `config/languages/<code>.py` (copy `en.py`; set `LANGUAGE_NAME`, `SCENES`,
+   `FRAUD_LABELS`, `VOICES`) and, if you want localized task prompts, a `templates_<code>.py`.
+2. Run the pipeline with `--lang <code>` (or `gen_only.sh <code> <N>` / `run_full_fast.sh <code> <N> <workers>`).
 
 ---
 
@@ -87,12 +96,12 @@ Each dialogue expands into the original task cascade: **scene** (2-turn) → **f
 bash scripts/env_setup.sh
 
 # 1a. generate all dialogues (text only) — fast, no audio
-srun --jobid=<held-gpu-job> --overlap bash scripts/gen_only.sh 7177 full
-#    -> out/dialogues_full.json
+srun --jobid=<held-gpu-job> --overlap bash scripts/gen_only.sh en 7177
+#    -> out/en/dialogues_full.json
 
-# 1b. synthesize audio + assemble (parallel TTS workers)
-srun --jobid=<held-gpu-job> --overlap bash scripts/run_full_fast.sh 7177 full \
-     /users/msingh/sharedscratch/TeleAntiFraud_en 4
+# 1b. synthesize audio + assemble (parallel TTS workers; reuses the dialogues above)
+srun --jobid=<held-gpu-job> --overlap bash scripts/run_full_fast.sh en 7177 4
+#    -> /users/msingh/sharedscratch/TeleAntiFraud_en/
 ```
 
 Grab a persistent GPU (queues once, holds 3 days, run work in via `--overlap`):

@@ -11,6 +11,7 @@ Run (on the A100 node, inside the `fraudtts` env):
         --audio-root /users/msingh/sharedscratch/TeleAntiFraud_en
 """
 import argparse, json, os, sys, tempfile
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
 
@@ -19,15 +20,25 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dialogues", required=True)
     ap.add_argument("--audio-root", default="/users/msingh/sharedscratch/TeleAntiFraud_en")
-    ap.add_argument("--subdir", default="NEG-gen-en")  # NEG = fraud (mirrors original convention)
+    ap.add_argument("--subdir", default=None, help="audio subdir; default NEG-gen-<lang> (NEG = fraud)")
     ap.add_argument("--lang", default="en")
-    ap.add_argument("--voice-caller", default="Damien Black")
-    ap.add_argument("--voice-callee", default="Ana Florence")
+    ap.add_argument("--voice-caller", default=None, help="default: language pack VOICES['caller']")
+    ap.add_argument("--voice-callee", default=None, help="default: language pack VOICES['callee']")
     ap.add_argument("--pause-ms", type=int, default=350)
     ap.add_argument("--out", default=None, help="dialogues file with audio paths added")
     ap.add_argument("--shard", type=int, default=0, help="this worker's index (0..nshards-1)")
     ap.add_argument("--nshards", type=int, default=1, help="total parallel workers")
     args = ap.parse_args()
+
+    # defaults from the language pack
+    from config.languages import get_language
+    pack = get_language(args.lang)
+    if args.subdir is None:
+        args.subdir = f"NEG-gen-{args.lang}"
+    if args.voice_caller is None:
+        args.voice_caller = pack.VOICES["caller"]
+    if args.voice_callee is None:
+        args.voice_callee = pack.VOICES["callee"]
 
     from TTS.api import TTS
     from pydub import AudioSegment
