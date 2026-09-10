@@ -34,7 +34,8 @@ Scenario: the caller {scenario}.
 
 Rules:
 - Two speakers only: "caller" (the fraudster) and "callee" (the target). Natural spoken {language_name}, {min_turns}-{max_turns} turns, alternating, starting with the caller.
-- Write every word fully in the native script of {language_name}; do NOT romanize or leave any part of a word in Latin letters (common borrowed terms like brand/app names are fine).
+- Write every word fully in the native script of {language_name}. Output ONLY in {language_name} — do NOT include any other language, transliteration, or meta-commentary. (A few universally-borrowed terms like OTP/PIN/SMS/app are fine.)
+- If the scam references a link/website, use a short plausible but clearly fictitious domain written normally (e.g. secure-portal.co); NEVER write the literal words "fake", "fake-verification", or placeholder tokens.
 - Give each speaker a definite gender and keep names + (in gendered languages) grammar consistent with it. The caller and callee may each be male or female — vary this naturally across calls.
 - IMPORTANT — the callee is an ordinary, TRUSTING person who does NOT see through the scam. They are polite and a little anxious or excited, ask only normal everyday questions, and are gradually persuaded so the scam realistically PROGRESSES and they begin to comply (this is an at-risk/negative example). Do not make the callee a savvy sceptic who instantly refuses.
 - The caller uses common, well-known social-engineering pressure: authority, fear, urgency, reassurance, flattery, isolation. Keep to widely-known tactics; do NOT invent novel techniques or a reusable step-by-step method that would materially help someone defeat real security controls.
@@ -71,6 +72,29 @@ def build_prompts(counts, pack, min_turns, max_turns):
             )
             items.append({"key": key, "fraud_label": label, "prompt": p})
     return items
+
+
+# --- language-purity / contamination filter -------------------------------------
+NON_LATIN_LANGS = {"hi", "ko", "zh", "ta", "bn", "te", "kn", "ml", "mr", "gu", "pa", "ur", "ja", "ru", "ar"}
+_GERMAN = re.compile(r'\b(Bitte|korrigieren|Deutsch|abgebrochen|wurde|diesen|Satz)\b')
+_LATIN_WORD = re.compile(r'[A-Za-z][A-Za-z\-]+')
+_LATIN_OK = {"otp", "pin", "sms", "app", "kb", "nh", "id", "atm", "upi", "cvv", "http", "https",
+             "com", "co", "url", "link", "netbanking", "sbi", "hdfc", "icici"}
+
+
+def is_clean(obj, lang, max_latin=8):
+    """Drop dialogues with cross-language contamination / literal placeholders."""
+    text = " ".join((t.get("text") or "") for t in obj.get("turns", []))
+    low = text.lower()
+    if "fake-verification" in low or "fake-link" in low or "fake link" in low:
+        return False
+    if _GERMAN.search(text):
+        return False
+    if lang in NON_LATIN_LANGS:
+        stray = [w for w in _LATIN_WORD.findall(text) if w.lower() not in _LATIN_OK]
+        if len(stray) > max_latin:
+            return False
+    return True
 
 
 def extract_json(text):
@@ -159,6 +183,9 @@ def main():
         except Exception as e:
             print(f"[gen] parse fail ({it['key']}): {e}", flush=True)
         if not obj or "turns" not in obj:
+            continue
+        if not is_clean(obj, args.lang):
+            print(f"[gen] contaminated, dropped ({it['key']})", flush=True)
             continue
         key = it["key"]
         per_type[key] = per_type.get(key, 0) + 1
