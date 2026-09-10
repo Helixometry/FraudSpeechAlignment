@@ -1,0 +1,35 @@
+# --- local tooling / editor ---
+.claude/
+.vscode/
+.idea/
+.DS_Store
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# --- generated dialogue data (reproducible via the pipeline) ---
+multiling_fraud/out/*
+!multiling_fraud/out/.gitkeep
+
+# --- large / generated media & archives ---
+*.mp3
+*.wav
+# keep the published sample audio gallery (10 curated clips)
+!audio/**/*.mp3
+*.flac
+*.zip
+*.tar
+*.tar.gz
+
+# --- envs, caches, cluster artifacts ---
+hf_cache/
+conda/
+*.node
+*.out
+*.err
+slurm-*.out
