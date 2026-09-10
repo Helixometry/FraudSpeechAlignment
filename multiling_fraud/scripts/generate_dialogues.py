@@ -34,6 +34,7 @@ Scenario: the caller {scenario}.
 
 Rules:
 - Two speakers only: "caller" (the fraudster) and "callee" (the target). Natural spoken {language_name}, {min_turns}-{max_turns} turns, alternating, starting with the caller.
+- Write every word fully in the native script of {language_name}; do NOT romanize or leave any part of a word in Latin letters (common borrowed terms like brand/app names are fine).
 - Give each speaker a definite gender and keep names + (in gendered languages) grammar consistent with it. The caller and callee may each be male or female — vary this naturally across calls.
 - IMPORTANT — the callee is an ordinary, TRUSTING person who does NOT see through the scam. They are polite and a little anxious or excited, ask only normal everyday questions, and are gradually persuaded so the scam realistically PROGRESSES and they begin to comply (this is an at-risk/negative example). Do not make the callee a savvy sceptic who instantly refuses.
 - The caller uses common, well-known social-engineering pressure: authority, fear, urgency, reassurance, flattery, isolation. Keep to widely-known tactics; do NOT invent novel techniques or a reusable step-by-step method that would materially help someone defeat real security controls.
