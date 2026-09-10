@@ -24,7 +24,7 @@ conda activate "$CONDA_ENVS_PATH/fraudgen"
 pip install --upgrade pip
 # vLLM pulls rust-built deps (llguidance) needing edition2024 -> need modern Rust.
 conda install -y -c conda-forge "rust>=1.85" maturin
-pip install "vllm>=0.6.3" "transformers>=4.45" autoawq accelerate
+pip install "vllm>=0.6.3" "transformers>=4.45" autoawq accelerate json-repair
 conda deactivate
 
 echo "=== [2/2] fraudtts (Coqui XTTS-v2 + audio) ==="

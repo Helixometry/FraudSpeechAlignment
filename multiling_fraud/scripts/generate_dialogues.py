@@ -60,7 +60,17 @@ def extract_json(text):
     if text.startswith("```"):
         text = re.sub(r"^```(json)?", "", text).rsplit("```", 1)[0]
     m = re.search(r"\{.*\}", text, re.DOTALL)
-    return json.loads(m.group(0)) if m else None
+    raw = m.group(0) if m else text
+    try:
+        return json.loads(raw)
+    except Exception:
+        # LLMs (esp. on exclamation-heavy scams like lottery) emit unescaped quotes /
+        # missing commas -> repair the JSON rather than dropping the sample.
+        try:
+            from json_repair import repair_json
+            return json.loads(repair_json(raw))
+        except Exception:
+            return None
 
 
 def gen_vllm(model, prompts, max_model_len, seed, max_tokens=1500):
