@@ -86,6 +86,12 @@ def main():
     done = 0
     for idx, dlg in enumerate(dialogues):
         did = dlg["id"]; cdir = os.path.join(root, did); os.makedirs(cdir, exist_ok=True)
+        # resume: skip clips already synthesized (survives GPU/hold restarts)
+        _mp3 = os.path.join(cdir, f"{did}.mp3")
+        if os.path.exists(_mp3) and os.path.getsize(_mp3) > 2000:
+            dlg["audio"] = os.path.join("audio", args.subdir, did, f"{did}.mp3")
+            done += 1
+            continue
         # gender-matched, rotated voices; consistent within this call
         caller_v = pick_voice(dlg.get("caller_gender", "male"), idx)
         callee_v = pick_voice(dlg.get("callee_gender", "female"), idx)

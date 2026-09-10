@@ -38,8 +38,10 @@ echo "### Stage 2: $NW parallel TTS workers ($LANG_CODE)"
 conda activate "$TTS"
 pids=()
 for i in $(seq 0 $((NW-1))); do
-  python scripts/tts_synthesize.py --lang "$LANG_CODE" --dialogues "$DIAL" --audio-root "$OUTROOT" \
-      --shard "$i" --nshards "$NW" --out "$OUTDIR/withaudio_${i}.json" &
+  # stagger starts: worker 0 warms the model into page cache, others then load fast
+  # (avoids 6 concurrent ~2GB reads thrashing the scratch NFS)
+  ( sleep $((i*10)); python scripts/tts_synthesize.py --lang "$LANG_CODE" --dialogues "$DIAL" \
+      --audio-root "$OUTROOT" --shard "$i" --nshards "$NW" --out "$OUTDIR/withaudio_${i}.json" ) &
   pids+=($!)
 done
 fail=0; for p in "${pids[@]}"; do wait "$p" || fail=1; done
