@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FraudSpeechAlignment — Sample Audio Gallery</title>
+<meta name="description" content="Sample fraud-call audio clips (English) used for speech-based fraud detection research." />
+<link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <span class="eyebrow">🎙️ Research dataset</span>
+      <h1>FraudSpeechAlignment</h1>
+      <p class="lede">
+        A small English-language sample set of simulated telecom fraud-call
+        recordings, used to align speech and text for fraud-call detection
+        research. Each clip below is a synthetic re-enactment of a common
+        scam scenario, labelled by category.
+      </p>
+      <p class="notice">
+        <strong>Note:</strong> These recordings are synthetic / staged
+        samples created for research and model-training purposes — they do
+        not contain real victims' data. Content depicts scam scripts
+        (bank, lottery, kidnapping, phishing, etc.) purely to help build and
+        evaluate <em>fraud-detection</em> systems.
+      </p>
+    </header>
+
+    <div class="filters" id="filters"></div>
+
+    <main class="grid" id="grid"></main>
+
+    <footer>
+      <p>
+        Part of the
+        <a href="https://github.com/Helixometry/FraudSpeechAlignment">FraudSpeechAlignment</a>
+        repository. Audio sourced from the TeleAntiFraud sample set
+        (English, fraud-only subset).
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    const CATEGORY_META = {
+      bank:              { label: "Bank",              color: "var(--tag-bank)" },
+      customer_service:  { label: "Customer Service",  color: "var(--tag-customer_service)" },
+      identity_theft:    { label: "Identity Theft",    color: "var(--tag-identity_theft)" },
+      investment:        { label: "Investment",        color: "var(--tag-investment)" },
+      kidnapping:        { label: "Kidnapping",        color: "var(--tag-kidnapping)" },
+      lottery:           { label: "Lottery",           color: "var(--tag-lottery)" },
+      phishing:          { label: "Phishing",          color: "var(--tag-phishing)" },
+    };
+
+    const CLIPS = [
+      { id: "en_bank_00001",             category: "bank",             title: "Fake Bank Security Call #1" },
+      { id: "en_bank_00002",             category: "bank",             title: "Fake Bank Security Call #2" },
+      { id: "en_customer_service_00001", category: "customer_service", title: "Bogus Customer Service Call #1" },
+      { id: "en_customer_service_00002", category: "customer_service", title: "Bogus Customer Service Call #2" },
+      { id: "en_identity_theft_00001",   category: "identity_theft",   title: "Identity Theft Scam" },
+      { id: "en_investment_00001",       category: "investment",       title: "Investment Scam #1" },
+      { id: "en_investment_00002",       category: "investment",       title: "Investment Scam #2" },
+      { id: "en_kidnapping_00001",       category: "kidnapping",       title: "Fake Kidnapping Scam" },
+      { id: "en_lottery_00001",          category: "lottery",          title: "Lottery Winnings Scam" },
+      { id: "en_phishing_00001",         category: "phishing",         title: "Phishing Call" },
+    ].map(c => ({ ...c, src: `audio/NEG-gen-en/${c.id}/${c.id}.mp3` }));
+
+    const grid = document.getElementById("grid");
+    const filtersEl = document.getElementById("filters");
+
+    function renderFilters() {
+      const cats = ["all", ...Object.keys(CATEGORY_META)];
+      filtersEl.innerHTML = cats.map(cat => {
+        const label = cat === "all" ? "All" : CATEGORY_META[cat].label;
+        return `<button class="filter-btn${cat === "all" ? " active" : ""}" data-cat="${cat}">${label}</button>`;
+      }).join("");
+
+      filtersEl.querySelectorAll(".filter-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          filtersEl.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          renderGrid(btn.dataset.cat);
+        });
+      });
+    }
+
+    function renderGrid(filter = "all") {
+      const items = filter === "all" ? CLIPS : CLIPS.filter(c => c.category === filter);
+      grid.innerHTML = items.map(c => {
+        const meta = CATEGORY_META[c.category];
+        return `
+          <article class="card">
+            <div class="card-top">
+              <div>
+                <h3>${c.title}</h3>
+                <div class="id">${c.id}</div>
+              </div>
+              <span class="tag" style="background:${meta.color}">${meta.label}</span>
+            </div>
+            <audio controls preload="none" src="${c.src}"></audio>
+            <div class="card-foot">
+              <span class="badge-fraud">● labelled: fraud</span>
+              <a href="${c.src}" download>Download</a>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    renderFilters();
+    renderGrid();
+  </script>
+</body>
+</html>
