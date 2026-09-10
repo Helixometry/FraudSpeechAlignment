@@ -10,10 +10,25 @@ Run (on the A100 node, inside the `fraudtts` env):
     python scripts/tts_synthesize.py --dialogues out/dialogues_pilot.json \
         --audio-root /users/msingh/sharedscratch/TeleAntiFraud_en
 """
-import argparse, json, os, sys, tempfile
+import argparse, json, os, re, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 MODEL = "tts_models/multilingual/multi-dataset/xtts_v2"
+
+# XTTS expands numbers via num2words, which has NO Hindi support -> crashes on digits.
+# For such languages, spell ASCII digits out ourselves so no raw digits reach XTTS.
+_DIGIT_WORDS = {
+    "hi": {"0": "शून्य", "1": "एक", "2": "दो", "3": "तीन", "4": "चार",
+           "5": "पाँच", "6": "छह", "7": "सात", "8": "आठ", "9": "नौ"},
+}
+
+
+def preprocess_text(text, lang):
+    words = _DIGIT_WORDS.get(lang)
+    if not words:
+        return text
+    text = text.replace(",", "")  # 50,000 -> 50000 (avoid decimal/thousands parsing)
+    return "".join(f" {words[c]} " if c in words else c for c in text)
 
 
 def main():
@@ -55,6 +70,7 @@ def main():
     audio_dir_root = os.path.join(args.audio_root, "audio", args.subdir)
 
     def synth_turn(text, speaker, path_wav):
+        text = preprocess_text(text, args.lang)
         tts.tts_to_file(text=text, speaker=speaker, language=args.lang, file_path=path_wav)
         return AudioSegment.from_wav(path_wav)
 
