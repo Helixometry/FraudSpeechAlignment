@@ -31,6 +31,17 @@ def preprocess_text(text, lang):
     return "".join(f" {words[c]} " if c in words else c for c in text)
 
 
+def assign_voices(pool, caller_gender, callee_gender, idx):
+    """Gender-matched voices for caller & callee, guaranteed DIFFERENT speakers."""
+    cp = pool["female"] if str(caller_gender).lower().startswith("f") else pool["male"]
+    ep = pool["female"] if str(callee_gender).lower().startswith("f") else pool["male"]
+    caller = cp[idx % len(cp)]
+    callee = ep[idx % len(ep)]
+    if caller == callee:
+        callee = ep[(idx + 1) % len(ep)]
+    return caller, callee
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dialogues", required=True)
@@ -51,10 +62,8 @@ def main():
     pack = get_language(args.lang)
     if args.subdir is None:
         args.subdir = f"NEG-gen-{args.lang}"
-    if args.voice_caller is None:
-        args.voice_caller = pack.VOICES["caller"]
-    if args.voice_callee is None:
-        args.voice_callee = pack.VOICES["callee"]
+    voice_pool = getattr(pack, "VOICE_POOL",
+                         {"male": [pack.VOICES["caller"]], "female": [pack.VOICES["callee"]]})
 
     from TTS.api import TTS
     from pydub import AudioSegment
@@ -81,10 +90,12 @@ def main():
         clip_dir = os.path.join(audio_dir_root, did)
         os.makedirs(clip_dir, exist_ok=True)
         final_mp3 = os.path.join(clip_dir, f"{did}.mp3")
+        n = int(re.findall(r"\d+", did)[-1]) if re.findall(r"\d+", did) else done
+        cv, ev = assign_voices(voice_pool, d.get("caller_gender", "male"), d.get("callee_gender", "female"), n)
         call = AudioSegment.silent(duration=0)
         with tempfile.TemporaryDirectory() as tmp:
             for i, turn in enumerate(d["turns"]):
-                spk = args.voice_caller if turn.get("speaker") == "caller" else args.voice_callee
+                spk = cv if turn.get("speaker") == "caller" else ev
                 text = (turn.get("text") or "").strip()
                 if not text:
                     continue

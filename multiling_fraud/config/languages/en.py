@@ -11,8 +11,14 @@ FRAUD_TYPE_CLOSED_SET = FRAUD_TYPE_CLOSED_SET_EN
 FRAUD_LABELS = {t["key"]: t["en"] for t in FRAUD_TYPES}   # fraud-type key -> display label
 SCENE_DEFAULT = DEFAULT_SCENE_FOR_TYPE                     # fraud-type key -> imitated scene
 
-# XTTS-v2 built-in voices for the two roles
+# XTTS-v2 built-in voices for the two roles (fallback)
 VOICES = {"caller": "Damien Black", "callee": "Ana Florence"}
+
+# gendered XTTS-v2 speaker pools -> gender-matched, distinct caller/callee, variety across calls
+VOICE_POOL = {
+    "male": ["Damien Black", "Craig Gutsy", "Aaron Dreschner", "Andrew Chipper", "Viktor Eka"],
+    "female": ["Ana Florence", "Claribel Dervla", "Daisy Studious", "Gracie Wise", "Alison Dietlinde"],
+}
 
 # per-gender victim/caller name pools (for diverse, gender-consistent personas)
 NAMES = {

@@ -29,9 +29,19 @@ def preprocess(text, lang):
     return text
 
 
-def pick_voice(gender, idx):
-    pool = FEMALE_VOICES if str(gender).lower().startswith("f") else MALE_VOICES
-    return pool[idx % len(pool)]
+def _pool(gender):
+    return FEMALE_VOICES if str(gender).lower().startswith("f") else MALE_VOICES
+
+
+def assign_voices(caller_gender, callee_gender, idx):
+    """Gender-matched voices for caller & callee, guaranteed to be DIFFERENT speakers
+    (even when both are the same gender). Rotates by idx for cross-call variety."""
+    cp, ep = _pool(caller_gender), _pool(callee_gender)
+    caller = cp[idx % len(cp)]
+    callee = ep[idx % len(ep)]
+    if caller == callee:                        # same gender -> force the other speaker
+        callee = ep[(idx + 1) % len(ep)]
+    return caller, callee
 
 
 def main():
@@ -92,7 +102,7 @@ def main():
             dlg["audio"] = os.path.join("audio", args.subdir, did, f"{did}.mp3"); done += 1; continue
         os.makedirs(cdir, exist_ok=True)
         n = int(re.findall(r"\d+", did)[-1]) if re.findall(r"\d+", did) else done
-        cv, ev = pick_voice(dlg.get("caller_gender", "male"), n), pick_voice(dlg.get("callee_gender", "female"), n)
+        cv, ev = assign_voices(dlg.get("caller_gender", "male"), dlg.get("callee_gender", "female"), n)
         descs, prompts = [], []
         for t in dlg["turns"]:
             txt = (t.get("text") or "").strip()

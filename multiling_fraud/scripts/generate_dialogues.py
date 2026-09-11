@@ -28,6 +28,65 @@ SCENARIO_HINTS = {
     "identity_theft": "poses as an official (tax office / government / utility) and, under threat of a penalty, pressures the victim to hand over personal identifiers (date of birth, ID/Aadhaar number, address)",
 }
 
+# Pools of sub-scenarios per fraud type -> within-type variety (pick one at random per call).
+SUB_SCENARIOS = {
+    "customer_service": [
+        "poses as support processing a refund for an accidental double charge and needs remote access / a verification payment",
+        "poses as support about a subscription auto-renewal the victim must cancel by confirming card details",
+        "poses as a delivery/e-commerce agent about a failed delivery needing a small redelivery fee and card details",
+        "poses as tech support claiming a virus was detected and the victim must install a remote-access app",
+        "poses as support warning the account will be suspended today unless the victim verifies banking details",
+        "poses as support offering a reward/cashback that requires a 'verification' transfer or app install",
+        "poses as a utility/telecom agent about a billing error and a refund needing bank details",
+    ],
+    "bank": [
+        "poses as the bank fraud team about a suspicious transaction and gets the OTP / card details",
+        "claims the card is blocked and must be reactivated by confirming the full number and PIN",
+        "claims urgent KYC re-verification is due or the account will be frozen",
+        "offers a pre-approved loan / credit-limit increase needing account details and a processing fee",
+        "claims a wrong transfer landed in the account and asks the victim to 'return' it",
+        "warns of a new-device login and pushes the victim to move funds to a 'safe account'",
+        "arranges a bank courier to collect the old card and PIN for 'secure destruction'",
+    ],
+    "investment": [
+        "pitches a guaranteed high-return crypto scheme with a midnight deadline",
+        "gives a 'hot' stock/IPO tip requiring an immediate deposit",
+        "promotes a forex/trading platform and walks the victim through funding an account",
+        "offers to recover the victim's past investment losses for an upfront fee",
+        "pitches a mutual-fund/pension 'upgrade' with a limited-time bonus",
+        "promotes a gold/real-estate scheme needing a booking amount now",
+    ],
+    "phishing": [
+        "claims the email account is compromised and pushes a link to re-verify the login and OTP",
+        "claims a social-media account is locked and needs re-login via a link",
+        "sends a parcel-redelivery link that harvests card details",
+        "claims a tax refund is waiting behind a verification link",
+        "claims wallet/UPI KYC must be redone via a link and OTP",
+        "claims a streaming subscription payment failed and links to a fake payment page",
+    ],
+    "lottery": [
+        "claims a big national-lottery win that needs a tax/processing fee up front",
+        "claims a lucky-draw prize from a shopping app needing a release fee",
+        "claims a mobile-number contest win requiring bank details to deposit the prize",
+        "claims a foreign lottery win needing customs/clearance charges",
+        "claims a car/gadget prize that requires paying GST/tax first",
+    ],
+    "kidnapping": [
+        "falsely claims to have kidnapped the victim's child and demands an urgent ransom, no police",
+        "claims to hold the victim's sibling over a fabricated debt and demands payment",
+        "poses as police saying a relative was arrested and needs immediate bail money",
+        "runs a virtual kidnapping with staged screaming, demanding money transferred now",
+        "claims the victim's spouse was in an accident and is 'held' until costs are paid",
+    ],
+    "identity_theft": [
+        "poses as the tax office threatening a penalty unless the victim confirms DOB and ID number",
+        "poses as a government-subsidy office needing the national ID (Aadhaar/SSN) to release funds",
+        "poses as a utility threatening disconnection unless personal identifiers are confirmed",
+        "poses as an employer/recruiter collecting ID documents for a fake job offer",
+        "poses as a census/KYC survey collecting date of birth, ID number and address",
+    ],
+}
+
 PROMPT = """You are helping build a *fraud-detection research dataset* used to TRAIN models that PROTECT people from telecom scams. Write ONE realistic {language_name} phone-call transcript that is an example of **{fraud_label}**.
 
 Scenario: the caller {scenario}.
