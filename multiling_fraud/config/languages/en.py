@@ -13,3 +13,11 @@ SCENE_DEFAULT = DEFAULT_SCENE_FOR_TYPE                     # fraud-type key -> i
 
 # XTTS-v2 built-in voices for the two roles
 VOICES = {"caller": "Damien Black", "callee": "Ana Florence"}
+
+# per-gender victim/caller name pools (for diverse, gender-consistent personas)
+NAMES = {
+    "male": ["James", "Robert", "David", "Michael", "William", "Thomas", "Daniel", "Paul",
+             "Mark", "Andrew", "Kevin", "Brian", "George", "Steven", "Peter", "Richard"],
+    "female": ["Mary", "Sarah", "Emily", "Jessica", "Laura", "Emma", "Olivia", "Sophie",
+               "Rachel", "Hannah", "Anna", "Grace", "Claire", "Alice", "Megan", "Lucy"],
+}

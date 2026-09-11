@@ -38,3 +38,11 @@ SCENE_DEFAULT = {k: "ग्राहक सेवा" for k in FRAUD_LABELS}
 
 # XTTS-v2 voices (built-in speakers work multilingually with language="hi")
 VOICES = {"caller": "Damien Black", "callee": "Ana Florence"}
+
+# per-gender name pools (Devanagari) for diverse, gender-consistent personas
+NAMES = {
+    "male": ["राजेश", "अमित", "विकास", "सुनील", "संजय", "मनोज", "दीपक", "राहुल",
+             "अनिल", "प्रकाश", "रवि", "विजय", "अजय", "संदीप", "नरेश", "गौरव"],
+    "female": ["सुनीता", "प्रिया", "अंजली", "पूजा", "नेहा", "कविता", "रेखा", "सीमा",
+               "ममता", "दिव्या", "स्वाति", "आरती", "मीना", "ज्योति", "शिखा", "राधा"],
+}

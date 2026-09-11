@@ -32,11 +32,13 @@ PROMPT = """You are helping build a *fraud-detection research dataset* used to T
 
 Scenario: the caller {scenario}.
 
+Profile for THIS specific call (make it clearly DIFFERENT from any other call): the caller is {caller_gender}; the victim (callee) is {callee_gender}, named {callee_name} ({context}). The unique detail to anchor this call: {seed_hint}. Invent fresh names, amounts, and story specifics — do NOT reuse a template.
+
 Rules:
 - Two speakers only: "caller" (the fraudster) and "callee" (the target). Natural spoken {language_name}, {min_turns}-{max_turns} turns, alternating, starting with the caller.
 - Write every word fully in the native script of {language_name}. Output ONLY in {language_name} — do NOT include any other language, transliteration, or meta-commentary. (A few universally-borrowed terms like OTP/PIN/SMS/app are fine.)
 - If the scam references a link/website, use a short plausible but clearly fictitious domain written normally (e.g. secure-portal.co); NEVER write the literal words "fake", "fake-verification", or placeholder tokens.
-- Give each speaker a definite gender and keep names + (in gendered languages) grammar consistent with it. The caller and callee may each be male or female — vary this naturally across calls.
+- Use pronouns and (in gendered languages) verb/adjective forms consistent with EACH speaker's gender as given in the profile above. The victim's name must match their stated gender.
 - IMPORTANT — the callee is an ordinary, TRUSTING person who does NOT see through the scam. They are polite and a little anxious or excited, ask only normal everyday questions, and are gradually persuaded so the scam realistically PROGRESSES and they begin to comply (this is an at-risk/negative example). Do not make the callee a savvy sceptic who instantly refuses.
 - The caller uses common, well-known social-engineering pressure: authority, fear, urgency, reassurance, flattery, isolation. Keep to widely-known tactics; do NOT invent novel techniques or a reusable step-by-step method that would materially help someone defeat real security controls.
 - Use ONLY fake names, companies and numbers. No real institutions, no real personal data, no real working links/apps/phone numbers. The transcript is illustrative for DETECTION, not an operational how-to; you may show the victim starting to comply but do not narrate completed financial theft in operational detail.
@@ -58,19 +60,47 @@ Return STRICT JSON only (no markdown fence), with EXACTLY these keys:
 """
 
 
-def build_prompts(counts, pack, min_turns, max_turns):
+import random
+
+# generic persona/context + unique-anchor pools (English instructions; the LLM localizes)
+CONTEXTS = [
+    "a 28-year-old software worker in a big city", "a 55-year-old shopkeeper in a small town",
+    "a 34-year-old schoolteacher", "a retired 68-year-old pensioner", "a 41-year-old homemaker",
+    "a 23-year-old college student", "a 47-year-old bank clerk", "a 60-year-old farmer",
+    "a 30-year-old nurse", "a 52-year-old small-business owner", "a 38-year-old delivery driver",
+    "a 45-year-old office manager", "a 26-year-old call-centre agent", "a 63-year-old widow(er)",
+]
+SEED_HINTS = [
+    "the victim just received their salary", "it is late evening and the victim is tired",
+    "the victim recently shopped online", "a festival is coming up and money is tight",
+    "the victim is at work and distracted", "the victim's phone battery is low",
+    "the victim was expecting a delivery", "the victim recently changed their bank",
+    "the victim is caring for a sick relative", "the victim just missed a call earlier",
+    "the victim is new to smartphones", "the victim has a big payment due soon",
+]
+
+
+def build_prompts(counts, pack, min_turns, max_turns, rng=None):
+    rng = rng or random.Random()
+    names = getattr(pack, "NAMES", {"male": ["Alex"], "female": ["Sam"]})
     items = []
     for key, n in counts.items():
         label = pack.FRAUD_LABELS[key]
         for _ in range(n):
+            cg = "male" if rng.random() < 0.60 else "female"      # callers skew male, but vary
+            eg = "female" if rng.random() < 0.55 else "male"      # victims mixed both genders
             p = PROMPT.format(
                 language_name=pack.LANGUAGE_NAME,
                 fraud_label=label,
                 scenario=SCENARIO_HINTS[key],
                 scenes=json.dumps(pack.SCENES, ensure_ascii=False),
                 min_turns=min_turns, max_turns=max_turns,
+                caller_gender=cg, callee_gender=eg,
+                callee_name=rng.choice(names[eg]), context=rng.choice(CONTEXTS),
+                seed_hint=rng.choice(SEED_HINTS),
             )
-            items.append({"key": key, "fraud_label": label, "prompt": p})
+            items.append({"key": key, "fraud_label": label, "prompt": p,
+                          "caller_gender": cg, "callee_gender": eg})
     return items
 
 
@@ -120,7 +150,9 @@ def gen_vllm(model, prompts, max_model_len, seed, max_tokens=1500):
     llm = LLM(model=model, max_model_len=max_model_len,
               gpu_memory_utilization=0.92, seed=seed,
               quantization="awq" if "AWQ" in model else None)
-    sp = SamplingParams(temperature=0.9, top_p=0.95, max_tokens=max_tokens, seed=seed)
+    # NO fixed sampling seed -> each sequence samples independently (avoids identical outputs
+    # for identical prompts). Diversity also comes from per-call profiles in the prompt.
+    sp = SamplingParams(temperature=1.0, top_p=0.95, max_tokens=max_tokens)
     return [o.outputs[0].text for o in llm.generate(prompts, sp)]
 
 
@@ -190,12 +222,10 @@ def main():
         key = it["key"]
         per_type[key] = per_type.get(key, 0) + 1
         did = f"{args.lang}_{key}_{per_type[key]:05d}"
-        obj.setdefault("caller_gender", "male")
-        obj.setdefault("callee_gender", "female")
-        obj["caller_gender"] = "female" if str(obj.get("caller_gender")).lower().startswith("f") else "male"
-        obj["callee_gender"] = "female" if str(obj.get("callee_gender")).lower().startswith("f") else "male"
         obj.update({
             "id": did, "language": args.lang,
+            # gender is what WE assigned (the LLM wrote grammar to match) — reliable for TTS
+            "caller_gender": it["caller_gender"], "callee_gender": it["callee_gender"],
             "fraud_type": it["fraud_label"], "fraud_type_key": key, "is_fraud": True,
         })
         dialogues.append(obj)

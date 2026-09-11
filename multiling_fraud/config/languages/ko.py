@@ -37,3 +37,11 @@ SCENE_DEFAULT = {k: "고객 서비스" for k in FRAUD_LABELS}
 
 # TTS voices (placeholder; Korean audio backend chosen at audio phase — XTTS-v2 supports 'ko')
 VOICES = {"caller": "Damien Black", "callee": "Ana Florence"}
+
+# per-gender name pools (Hangul) for diverse, gender-consistent personas
+NAMES = {
+    "male": ["민준", "지훈", "서준", "도윤", "예준", "시우", "하준", "주원",
+             "준우", "현우", "지호", "건우", "우진", "선우", "정우", "성민"],
+    "female": ["서연", "지우", "하은", "지유", "서윤", "지민", "수아", "하윤",
+               "예은", "다은", "은서", "지아", "채원", "유진", "소율", "민서"],
+}
