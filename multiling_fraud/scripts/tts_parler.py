@@ -45,6 +45,7 @@ def main():
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--nshards", type=int, default=1)
     ap.add_argument("--max-batch", type=int, default=20, help="cap turns per generate call")
+    ap.add_argument("--max-seconds", type=float, default=90.0, help="hard cap on clip length (turn boundary)")
     args = ap.parse_args()
     if args.subdir is None:
         args.subdir = f"NEG-gen-{args.lang}"
@@ -104,9 +105,11 @@ def main():
         segs = []
         for i in range(0, len(prompts), args.max_batch):
             segs += synth_batch(descs[i:i + args.max_batch], prompts[i:i + args.max_batch])
-        pieces = []
+        pieces = []; total = 0; cap = int(args.max_seconds * sr)
         for s in segs:
-            pieces.append(s); pieces.append(pause)
+            if total + len(s) > cap and pieces:   # stop at a turn boundary (never exceed cap)
+                break
+            pieces.append(s); pieces.append(pause); total += len(s) + len(pause)
         final = np.concatenate(pieces) if pieces else np.zeros(int(0.1 * sr), dtype="float32")
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tw:
             sf.write(tw.name, final, sr)

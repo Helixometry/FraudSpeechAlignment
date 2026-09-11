@@ -36,6 +36,7 @@ Profile for THIS specific call (make it clearly DIFFERENT from any other call): 
 
 Rules:
 - Two speakers only: "caller" (the fraudster) and "callee" (the target). Natural spoken {language_name}, {min_turns}-{max_turns} turns, alternating, starting with the caller.
+- Keep it BRIEF: each turn is ONE short spoken sentence (occasionally two). The whole call must be short enough to speak aloud in UNDER 90 seconds — get to the scam quickly, no long monologues or filler.
 - Write every word fully in the native script of {language_name}. Output ONLY in {language_name} — do NOT include any other language, transliteration, or meta-commentary. (A few universally-borrowed terms like OTP/PIN/SMS/app are fine.)
 - If the scam references a link/website, use a short plausible but clearly fictitious domain written normally (e.g. secure-portal.co); NEVER write the literal words "fake", "fake-verification", or placeholder tokens.
 - Use pronouns and (in gendered languages) verb/adjective forms consistent with EACH speaker's gender as given in the profile above. The victim's name must match their stated gender.
@@ -187,8 +188,8 @@ def main():
     ap.add_argument("--model", default=os.environ.get("FRAUD_LLM", "Qwen/Qwen2.5-72B-Instruct-AWQ"))
     ap.add_argument("--backend", choices=["vllm", "hf"], default="vllm",
                     help="vllm (fast, full-GPU) or hf (robust on MIG slices)")
-    ap.add_argument("--min-turns", type=int, default=10)
-    ap.add_argument("--max-turns", type=int, default=16)
+    ap.add_argument("--min-turns", type=int, default=6)
+    ap.add_argument("--max-turns", type=int, default=10)
     ap.add_argument("--max-model-len", type=int, default=4096)
     ap.add_argument("--max-new-tokens", type=int, default=1500, help="raise if outputs truncate (JSON parse fails)")
     ap.add_argument("--only-type", default=None, help="generate ONLY this fraud-type key (top-up); --n = count")

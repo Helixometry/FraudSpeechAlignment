@@ -41,6 +41,7 @@ def main():
     ap.add_argument("--voice-callee", default=None, help="default: language pack VOICES['callee']")
     ap.add_argument("--pause-ms", type=int, default=350)
     ap.add_argument("--out", default=None, help="dialogues file with audio paths added")
+    ap.add_argument("--max-seconds", type=float, default=90.0, help="hard cap on clip length (turn boundary)")
     ap.add_argument("--shard", type=int, default=0, help="this worker's index (0..nshards-1)")
     ap.add_argument("--nshards", type=int, default=1, help="total parallel workers")
     args = ap.parse_args()
@@ -88,6 +89,8 @@ def main():
                 if not text:
                     continue
                 seg = synth_turn(text, spk, os.path.join(tmp, f"t{i}.wav"))
+                if len(call) + len(seg) > args.max_seconds * 1000 and len(call) > 0:
+                    break                       # hard cap at a turn boundary (<= max_seconds)
                 call += seg + pause
         call.export(final_mp3, format="mp3", bitrate="64k")
         # relative path exactly like original metadata ("audio/...")
