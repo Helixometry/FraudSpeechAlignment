@@ -20,10 +20,23 @@ VOICE_POOL = {
     "female": ["Ana Florence", "Claribel Dervla", "Daisy Studious", "Gracie Wise", "Alison Dietlinde"],
 }
 
-# per-gender victim/caller name pools (for diverse, gender-consistent personas)
+# per-gender victim/caller name pools (for diverse, gender-consistent personas).
+# Deliberately large + varied so neither the victim NOR the caller/agent name
+# concentrates on a handful of defaults.
 NAMES = {
     "male": ["James", "Robert", "David", "Michael", "William", "Thomas", "Daniel", "Paul",
-             "Mark", "Andrew", "Kevin", "Brian", "George", "Steven", "Peter", "Richard"],
+             "Mark", "Andrew", "Kevin", "Brian", "George", "Steven", "Peter", "Richard",
+             "John", "Christopher", "Matthew", "Anthony", "Joshua", "Nathan", "Simon",
+             "Adam", "Jonathan", "Patrick", "Gary", "Dennis", "Frank", "Harold", "Ronald",
+             "Carl", "Henry", "Douglas", "Arthur", "Roger", "Terry", "Keith", "Gerald",
+             "Lawrence", "Ryan", "Ethan", "Nicholas", "Benjamin", "Samuel", "Gregory",
+             "Sean", "Philip", "Vincent", "Marcus", "Dominic", "Oscar", "Leonard", "Wesley"],
     "female": ["Mary", "Sarah", "Emily", "Jessica", "Laura", "Emma", "Olivia", "Sophie",
-               "Rachel", "Hannah", "Anna", "Grace", "Claire", "Alice", "Megan", "Lucy"],
+               "Rachel", "Hannah", "Anna", "Grace", "Claire", "Alice", "Megan", "Lucy",
+               "Elizabeth", "Katherine", "Rebecca", "Nicole", "Amanda", "Michelle",
+               "Stephanie", "Melissa", "Christine", "Diane", "Carol", "Susan", "Karen",
+               "Nancy", "Patricia", "Linda", "Barbara", "Sandra", "Donna", "Sharon",
+               "Deborah", "Ruth", "Julia", "Victoria", "Charlotte", "Amelia", "Isabella",
+               "Chloe", "Natalie", "Vanessa", "Teresa", "Gloria", "Paula", "Yvonne",
+               "Bethany", "Fiona", "Heather", "Wendy"],
 }

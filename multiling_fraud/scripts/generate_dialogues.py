@@ -91,13 +91,13 @@ PROMPT = """You are helping build a *fraud-detection research dataset* used to T
 
 Scenario: the caller {scenario}.
 
-Profile for THIS specific call (make it clearly DIFFERENT from any other call): the caller is {caller_gender}; the victim (callee) is {callee_gender}, named {callee_name} ({context}). The unique detail to anchor this call: {seed_hint}. Invent fresh names, amounts, and story specifics — do NOT reuse a template.
+Profile for THIS specific call (make it clearly DIFFERENT from any other call): the caller is {caller_gender} and introduces themselves as {caller_name}; the victim (callee) is {callee_gender}, named {callee_name} ({context}). Use these exact given names for the two people — do NOT substitute your own default names. The unique detail to anchor this call: {seed_hint}. Invent fresh amounts and story specifics — do NOT reuse a template.
 
 Rules:
 - Two speakers only: "caller" (the fraudster) and "callee" (the target). Natural spoken {language_name}, {min_turns}-{max_turns} turns, alternating, starting with the caller.
 - Keep it BRIEF: each turn is ONE short spoken sentence (occasionally two). The whole call must be short enough to speak aloud in UNDER 90 seconds — get to the scam quickly, no long monologues or filler.
-- Write every word fully in the native script of {language_name}. Output ONLY in {language_name} — do NOT include any other language, transliteration, or meta-commentary. (A few universally-borrowed terms like OTP/PIN/SMS/app are fine.)
-- If the scam references a link/website, use a short plausible but clearly fictitious domain written normally (e.g. secure-portal.co); NEVER write the literal words "fake", "fake-verification", or placeholder tokens.
+{script_rule}
+- Do NOT write any literal URL, email address or domain name; refer to a link/website/app in words. NEVER write the literal words "fake", "fake-verification", or placeholder tokens.
 - Use pronouns and (in gendered languages) verb/adjective forms consistent with EACH speaker's gender as given in the profile above. The victim's name must match their stated gender.
 - IMPORTANT — the callee is an ordinary, TRUSTING person who does NOT see through the scam. They are polite and a little anxious or excited, ask only normal everyday questions, and are gradually persuaded so the scam realistically PROGRESSES and they begin to comply (this is an at-risk/negative example). Do not make the callee a savvy sceptic who instantly refuses.
 - The caller uses common, well-known social-engineering pressure: authority, fear, urgency, reassurance, flattery, isolation. Keep to widely-known tactics; do NOT invent novel techniques or a reusable step-by-step method that would materially help someone defeat real security controls.
@@ -122,6 +122,35 @@ Return STRICT JSON only (no markdown fence), with EXACTLY these keys:
 
 import random
 
+# --- per-language script rule (injected as {script_rule} into PROMPT) ------------
+CODE_MIXED_LANGS = {"hinglish"}
+SCRIPT_RULE_NATIVE = (
+    "- Write EVERY word in the native script of {language_name}, INCLUDING borrowed/"
+    "technical terms — e.g. in Hindi write ओटीपी, पिन, ऐप, लिंक, बैंक, ईमेल (NOT \"OTP\", "
+    "\"PIN\", \"app\", \"link\"). Use NO Latin letters at all. Output ONLY in {language_name}: "
+    "no English words, no transliteration, no meta-commentary. Every sentence must be fully "
+    "intelligible to a native speaker."
+)
+SCRIPT_RULE_LATIN = "- Write natural, fluent spoken {language_name}."
+SCRIPT_RULE_HINGLISH = (
+    "- Write natural CODE-SWITCHED Hinglish exactly as urban Indian callers really speak: "
+    "Hindi in DEVANAGARI as the base/matrix language, with common English words and short "
+    "phrases kept in LATIN script mixed in (e.g. account, block, verify, transaction, OTP, "
+    "link, update, KYC, sir, madam, please, actually, sorry, don't worry). Keep the Hindi in "
+    "Devanagari — do NOT romanize it; and do NOT write whole sentences purely in English. "
+    "Aim for a realistic mix (roughly a quarter to a third of the words English). No meta-commentary."
+)
+
+
+def _script_rule(pack):
+    code, name = pack.CODE, pack.LANGUAGE_NAME
+    if code in CODE_MIXED_LANGS:
+        return SCRIPT_RULE_HINGLISH
+    if code in NON_LATIN_LANGS:
+        return SCRIPT_RULE_NATIVE.format(language_name=name)
+    return SCRIPT_RULE_LATIN.format(language_name=name)
+
+
 # generic persona/context + unique-anchor pools (English instructions; the LLM localizes)
 CONTEXTS = [
     "a 28-year-old software worker in a big city", "a 55-year-old shopkeeper in a small town",
@@ -143,20 +172,26 @@ SEED_HINTS = [
 def build_prompts(counts, pack, min_turns, max_turns, rng=None):
     rng = rng or random.Random()
     names = getattr(pack, "NAMES", {"male": ["Alex"], "female": ["Sam"]})
+    script_rule = _script_rule(pack)
     items = []
     for key, n in counts.items():
         label = pack.FRAUD_LABELS[key]
         for _ in range(n):
             cg = "male" if rng.random() < 0.60 else "female"      # callers skew male, but vary
             eg = "female" if rng.random() < 0.55 else "male"      # victims mixed both genders
+            caller_name = rng.choice(names[cg])
+            callee_name = rng.choice(names[eg])
+            while callee_name == caller_name and len(names[eg]) > 1:
+                callee_name = rng.choice(names[eg])               # keep the two people distinct
             p = PROMPT.format(
                 language_name=pack.LANGUAGE_NAME,
+                script_rule=script_rule,
                 fraud_label=label,
                 scenario=SCENARIO_HINTS[key],
                 scenes=json.dumps(pack.SCENES, ensure_ascii=False),
                 min_turns=min_turns, max_turns=max_turns,
                 caller_gender=cg, callee_gender=eg,
-                callee_name=rng.choice(names[eg]), context=rng.choice(CONTEXTS),
+                caller_name=caller_name, callee_name=callee_name, context=rng.choice(CONTEXTS),
                 seed_hint=rng.choice(SEED_HINTS),
             )
             items.append({"key": key, "fraud_label": label, "prompt": p,
@@ -168,21 +203,33 @@ def build_prompts(counts, pack, min_turns, max_turns, rng=None):
 NON_LATIN_LANGS = {"hi", "ko", "zh", "ta", "bn", "te", "kn", "ml", "mr", "gu", "pa", "ur", "ja", "ru", "ar"}
 _GERMAN = re.compile(r'\b(Bitte|korrigieren|Deutsch|abgebrochen|wurde|diesen|Satz)\b')
 _LATIN_WORD = re.compile(r'[A-Za-z][A-Za-z\-]+')
-_LATIN_OK = {"otp", "pin", "sms", "app", "kb", "nh", "id", "atm", "upi", "cvv", "http", "https",
-             "com", "co", "url", "link", "netbanking", "sbi", "hdfc", "icici"}
+# truly-unavoidable acronyms a native might still utter in Latin; everything else
+# (domains, emails, English words, transliteration) must be in the native script.
+_LATIN_OK = {"otp", "pin", "sms", "atm", "upi", "cvv", "id"}
 
 
 def is_clean(obj, lang, max_latin=8):
-    """Drop dialogues with cross-language contamination / literal placeholders."""
-    text = " ".join((t.get("text") or "") for t in obj.get("turns", []))
+    """Drop dialogues with cross-language contamination / literal placeholders.
+    For non-Latin languages we are STRICT: stray Latin (domains, emails, English
+    fragments) is what makes the TTS speak unintelligibly, so tolerate almost none."""
+    turns = obj.get("turns", [])
+    if not all(isinstance(t, dict) for t in turns):
+        return False
+    text = " ".join((t.get("text") or "") for t in turns)
     low = text.lower()
     if "fake-verification" in low or "fake-link" in low or "fake link" in low:
         return False
     if _GERMAN.search(text):
         return False
     if lang in NON_LATIN_LANGS:
-        stray = [w for w in _LATIN_WORD.findall(text) if w.lower() not in _LATIN_OK]
-        if len(stray) > max_latin:
+        # ZERO-TOLERANCE: any Latin letter means a code-mixed/fused word (मadam,
+        # तransaction), an email/URL, or English — all of which make the TTS
+        # unintelligible. Reject the whole dialogue; we top-up to hit the target.
+        if re.search(r'[A-Za-z]', text):
+            return False
+    if lang in CODE_MIXED_LANGS:
+        # must be GENUINE code-switch: Hindi (Devanagari) matrix + some English (Latin).
+        if not re.search(r'[ऀ-ॿ]', text) or not re.search(r'[A-Za-z]', text):
             return False
     return True
 
@@ -252,11 +299,17 @@ def main():
     ap.add_argument("--max-model-len", type=int, default=4096)
     ap.add_argument("--max-new-tokens", type=int, default=1500, help="raise if outputs truncate (JSON parse fails)")
     ap.add_argument("--only-type", default=None, help="generate ONLY this fraud-type key (top-up); --n = count")
+    ap.add_argument("--counts-json", default=None, help="JSON file with explicit {type: count} (top-up); overrides --n/--only-type")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
     pack = get_language(args.lang)
-    counts = {args.only_type: args.n} if args.only_type else distribute(args.n)
+    if args.counts_json:
+        counts = json.load(open(args.counts_json))
+    elif args.only_type:
+        counts = {args.only_type: args.n}
+    else:
+        counts = distribute(args.n)
     print(f"[gen] lang={args.lang} backend={args.backend} model={args.model} distribution: {counts}", flush=True)
     items = build_prompts(counts, pack, args.min_turns, args.max_turns)
 

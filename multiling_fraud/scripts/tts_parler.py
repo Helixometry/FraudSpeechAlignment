@@ -20,12 +20,26 @@ CALLEE_STYLE = ("{v} speaks in an expressive, slightly anxious and hesitant tone
                 "pace. The recording is very clear and close-sounding.")
 _HI_DIGITS = {"0": "शून्य", "1": "एक", "2": "दो", "3": "तीन", "4": "चार",
               "5": "पाँच", "6": "छह", "7": "सात", "8": "आठ", "9": "नौ"}
+# safety net: render unavoidable acronyms in Devanagari, drop any other Latin run so
+# the Hindi model never voices Latin as gibberish ("speaking something else").
+_HI_LATIN_MAP = {"otp": "ओटीपी", "pin": "पिन", "sms": "एसएमएस", "atm": "एटीएम",
+                 "upi": "यूपीआई", "cvv": "सीवीवी", "id": "आईडी", "app": "ऐप",
+                 "link": "लिंक", "email": "ईमेल", "kyc": "केवाईसी"}
+_LATIN_RUN = re.compile(r'[A-Za-z][A-Za-z0-9._\-@]*')
+
+
+def _strip_latin_hi(text):
+    def repl(m):
+        return _HI_LATIN_MAP.get(m.group(0).lower(), " ")   # map known, else drop
+    return _LATIN_RUN.sub(repl, text)
 
 
 def preprocess(text, lang):
     if lang == "hi":
+        text = _strip_latin_hi(text)
         text = text.replace(",", "")
         text = "".join(f" {_HI_DIGITS[c]} " if c in _HI_DIGITS else c for c in text)
+        text = re.sub(r'\s{2,}', ' ', text).strip()
     return text
 
 
