@@ -1,9 +1,18 @@
-# Multilingual Fraud Dataset (English) — a TeleAntiFraud-style, fraud-only, audio-text dataset
+# FraudAlign-MCS — a TeleAntiFraud-style, fraud-only, multilingual audio-text dataset
 
-Generate a native **English** telecom-fraud dataset that mirrors the structure of the Chinese
+> **New here / setting up on another machine? → [SETUP.md](SETUP.md).**
+> **Current build state → [PROJECT_STATUS.md](PROJECT_STATUS.md).** Pipeline design → [PIPELINE.md](PIPELINE.md).
+>
+> This project now spans **four languages** — English (`en`), Hindi (`hi`), Korean (`ko`),
+> and Hinglish (`hinglish`), 7,177 dialogues each — published (gated) as **FraudAlign-MCS**
+> at `ggirishg/MultiFraudAlign`. English/Korean audio use **XTTS-v2**; Hindi/Hinglish use
+> **Indic-Parler-TTS**. The sections below describe the original English pipeline; the
+> multilingual specifics are in SETUP.md.
+
+Generate a native telecom-fraud dataset that mirrors the structure of the Chinese
 **TeleAntiFraud-28k** dataset — same fraud taxonomy, same JSON/JSONL schema, same
 scene → fraud → fraud-type task cascade, and real **spoken 2-speaker audio** — but produced
-fresh in English (not translated) and containing **fraud calls only**.
+fresh per language (not translated) and containing **fraud calls only**.
 
 Built to support **audio-LM (ALM) alignment**: the dialogues are the foundation for both the
 audio and, later, `+`/`−` preference pairs.

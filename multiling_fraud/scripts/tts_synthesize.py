@@ -31,6 +31,39 @@ def preprocess_text(text, lang):
     return "".join(f" {words[c]} " if c in words else c for c in text)
 
 
+# XTTS aborts on inputs above ~400 tokens ("XTTS can only generate text with a
+# maximum of 400 tokens"). Split long turns at sentence boundaries (Latin ., ! ?;
+# CJK 。！？; Devanagari danda ।॥) and greedily pack into <=max_chars pieces so the
+# FULL text is still spoken — we only cut where a human would pause, then concat.
+_SENT_SPLIT = re.compile(r"(?<=[.!?。！？…।॥])\s+")
+
+
+def chunk_text(text, max_chars=240):
+    text = text.strip()
+    if len(text) <= max_chars:
+        return [text] if text else []
+    chunks, cur = [], ""
+    for part in _SENT_SPLIT.split(text):
+        part = part.strip()
+        if not part:
+            continue
+        # a single sentence longer than the cap -> hard-split, preferring a space
+        while len(part) > max_chars:
+            cut = part[:max_chars].rfind(" ")
+            cut = cut if cut > max_chars // 2 else max_chars
+            chunks.append(part[:cut].strip())
+            part = part[cut:].strip()
+        if len(cur) + len(part) + 1 <= max_chars:
+            cur = (cur + " " + part).strip()
+        else:
+            if cur:
+                chunks.append(cur)
+            cur = part
+    if cur:
+        chunks.append(cur)
+    return [c for c in chunks if c]
+
+
 def assign_voices(pool, caller_gender, callee_gender, idx):
     """Gender-matched voices for caller & callee, guaranteed DIFFERENT speakers."""
     cp = pool["female"] if str(caller_gender).lower().startswith("f") else pool["male"]
@@ -79,10 +112,14 @@ def main():
     pause = AudioSegment.silent(duration=args.pause_ms)
     audio_dir_root = os.path.join(args.audio_root, "audio", args.subdir)
 
-    def synth_turn(text, speaker, path_wav):
-        text = preprocess_text(text, args.lang)
-        tts.tts_to_file(text=text, speaker=speaker, language=args.lang, file_path=path_wav)
-        return AudioSegment.from_wav(path_wav)
+    def synth_turn(text, speaker, wav_prefix):
+        # split over-long turns so no single XTTS call exceeds its 400-token cap
+        seg = AudioSegment.silent(duration=0)
+        for j, chunk in enumerate(chunk_text(preprocess_text(text, args.lang))):
+            wav = f"{wav_prefix}_{j}.wav"
+            tts.tts_to_file(text=chunk, speaker=speaker, language=args.lang, file_path=wav)
+            seg += AudioSegment.from_wav(wav)
+        return seg
 
     done = 0
     for d in dialogues:
@@ -90,20 +127,33 @@ def main():
         clip_dir = os.path.join(audio_dir_root, did)
         os.makedirs(clip_dir, exist_ok=True)
         final_mp3 = os.path.join(clip_dir, f"{did}.mp3")
+        if os.path.exists(final_mp3) and os.path.getsize(final_mp3) > 0:
+            d["audio"] = os.path.join("audio", args.subdir, did, f"{did}.mp3")
+            done += 1
+            print(f"[tts] {done}/{len(dialogues)}  {did}  SKIP", flush=True)
+            continue
         n = int(re.findall(r"\d+", did)[-1]) if re.findall(r"\d+", did) else done
         cv, ev = assign_voices(voice_pool, d.get("caller_gender", "male"), d.get("callee_gender", "female"), n)
-        call = AudioSegment.silent(duration=0)
-        with tempfile.TemporaryDirectory() as tmp:
-            for i, turn in enumerate(d["turns"]):
-                spk = cv if turn.get("speaker") == "caller" else ev
-                text = (turn.get("text") or "").strip()
-                if not text:
-                    continue
-                seg = synth_turn(text, spk, os.path.join(tmp, f"t{i}.wav"))
-                if len(call) + len(seg) > args.max_seconds * 1000 and len(call) > 0:
-                    break                       # hard cap at a turn boundary (<= max_seconds)
-                call += seg + pause
-        call.export(final_mp3, format="mp3", bitrate="64k")
+        # one bad turn must not take down the whole shard -> isolate per dialogue
+        try:
+            call = AudioSegment.silent(duration=0)
+            with tempfile.TemporaryDirectory() as tmp:
+                for i, turn in enumerate(d["turns"]):
+                    spk = cv if turn.get("speaker") == "caller" else ev
+                    text = (turn.get("text") or "").strip()
+                    if not text:
+                        continue
+                    seg = synth_turn(text, spk, os.path.join(tmp, f"t{i}"))
+                    if len(call) + len(seg) > args.max_seconds * 1000 and len(call) > 0:
+                        break                   # hard cap at a turn boundary (<= max_seconds)
+                    call += seg + pause
+            if len(call) == 0:
+                print(f"[tts] {did} SKIP-EMPTY (no synthesizable turns)", flush=True)
+                continue
+            call.export(final_mp3, format="mp3", bitrate="64k")
+        except Exception as e:
+            print(f"[tts] {did} FAILED: {type(e).__name__}: {e}", flush=True)
+            continue
         # relative path exactly like original metadata ("audio/...")
         d["audio"] = os.path.join("audio", args.subdir, did, f"{did}.mp3")
         done += 1
