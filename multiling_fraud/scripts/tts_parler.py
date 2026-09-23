@@ -117,27 +117,35 @@ def main():
         os.makedirs(cdir, exist_ok=True)
         n = int(re.findall(r"\d+", did)[-1]) if re.findall(r"\d+", did) else done
         cv, ev = assign_voices(dlg.get("caller_gender", "male"), dlg.get("callee_gender", "female"), n)
-        descs, prompts = [], []
-        for t in dlg["turns"]:
-            txt = (t.get("text") or "").strip()
-            if not txt:
+        # one bad clip must not take down the whole shard -> isolate per dialogue
+        try:
+            descs, prompts = [], []
+            for t in dlg["turns"]:
+                txt = (t.get("text") or "").strip()
+                if not txt:
+                    continue
+                style = CALLER_STYLE if t.get("speaker") == "caller" else CALLEE_STYLE
+                descs.append(style.format(v=cv if t.get("speaker") == "caller" else ev))
+                prompts.append(preprocess(txt, args.lang))
+            # batch the clip's turns (split if above cap)
+            segs = []
+            for i in range(0, len(prompts), args.max_batch):
+                segs += synth_batch(descs[i:i + args.max_batch], prompts[i:i + args.max_batch])
+            pieces = []; total = 0; cap = int(args.max_seconds * sr)
+            for s in segs:
+                if total + len(s) > cap and pieces:   # stop at a turn boundary (never exceed cap)
+                    break
+                pieces.append(s); pieces.append(pause); total += len(s) + len(pause)
+            if not pieces:
+                print(f"[parler] {did} SKIP-EMPTY (no synthesizable turns)", flush=True)
                 continue
-            style = CALLER_STYLE if t.get("speaker") == "caller" else CALLEE_STYLE
-            descs.append(style.format(v=cv if t.get("speaker") == "caller" else ev))
-            prompts.append(preprocess(txt, args.lang))
-        # batch the clip's turns (split if above cap)
-        segs = []
-        for i in range(0, len(prompts), args.max_batch):
-            segs += synth_batch(descs[i:i + args.max_batch], prompts[i:i + args.max_batch])
-        pieces = []; total = 0; cap = int(args.max_seconds * sr)
-        for s in segs:
-            if total + len(s) > cap and pieces:   # stop at a turn boundary (never exceed cap)
-                break
-            pieces.append(s); pieces.append(pause); total += len(s) + len(pause)
-        final = np.concatenate(pieces) if pieces else np.zeros(int(0.1 * sr), dtype="float32")
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tw:
-            sf.write(tw.name, final, sr)
-            AudioSegment.from_wav(tw.name).export(mp3, format="mp3", bitrate="64k")
+            final = np.concatenate(pieces)
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tw:
+                sf.write(tw.name, final, sr)
+                AudioSegment.from_wav(tw.name).export(mp3, format="mp3", bitrate="64k")
+        except Exception as e:
+            print(f"[parler] {did} FAILED: {type(e).__name__}: {e}", flush=True)
+            continue
         dlg["audio"] = os.path.join("audio", args.subdir, did, f"{did}.mp3")
         done += 1
         print(f"[parler] {done}/{len(dialogues)}  {did}  ({len(final)/sr:.1f}s)", flush=True)
