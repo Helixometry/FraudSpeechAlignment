@@ -4,7 +4,8 @@ Snapshot of where the dataset build stands and the key decisions behind it.
 (Setup/reproduction steps live in **[SETUP.md](SETUP.md)**; pipeline design in
 **[PIPELINE.md](PIPELINE.md)**.)
 
-Last updated: 2026-09-22.
+Last updated: 2026-09-23. **Migrating to a new GPU server — see [HANDOFF.md](HANDOFF.md)
+for how to resume the current annotation task there.**
 
 ## What this is
 A **fraud-only** multilingual + code-switched scam-call dataset, natively generated
@@ -21,8 +22,17 @@ Korean (`ko`), Hinglish (`hinglish`).
 | Phase | Content | State |
 |---|---|---|
 | 1 — text | `data/<lang>/train.jsonl` (dialogues + labels + `audio_file` pointer) | ✅ all 4 languages on the Hub |
-| 2 — audio | `audio/<lang>/<id>.mp3` (2-speaker TTS) | 🔄 en ✅, hi ✅, **ko ✅ (7,177)**, hinglish ▶️ generating |
+| 2 — audio | `audio/<lang>/<id>.mp3` (2-speaker TTS) | ✅ all 4 languages (28,708 clips) on the Hub |
+| 2b — annotations (current) | `manipulation_tactics` + `requested_action` + `compliance_level` | ⏳ labeler ready; run on new server — see [HANDOFF.md](HANDOFF.md) |
 | 3 — preference pairs | `preferences/<lang>/` (chosen/rejected for ALM alignment) | 🗓️ planned |
+
+## Two taxonomies (for P(unsafe behavior | manipulation strategy))
+- **Taxonomy 1 — fraud outcome (what):** `fraud_type_key` (7 types) — already in every row.
+- **Taxonomy 2 — manipulation mechanism (how) + ask + outcome:** added by
+  `scripts/label_annotations.py` (one 72B pass, greedy): `manipulation_tactics`
+  (authority/urgency/fear/affinity/reward/isolation/credential_request, binary),
+  `requested_action` (10-way), `compliance_level` (full/partial/none). Per-turn
+  **timestamps** were considered and **deferred** (would need forced alignment).
 
 ## Audio backends (per language)
 - **English, Korean → XTTS-v2** (`fraudtts` env, `tts_range.sh` → `tts_synthesize.py`)

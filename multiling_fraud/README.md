@@ -1,6 +1,7 @@
 # FraudAlign-MCS — a TeleAntiFraud-style, fraud-only, multilingual audio-text dataset
 
-> **New here / setting up on another machine? → [SETUP.md](SETUP.md).**
+> **Resuming on a new GPU server? → [HANDOFF.md](HANDOFF.md)** (single-page context + resume steps).
+> **Setting up from scratch? → [SETUP.md](SETUP.md).**
 > **Current build state → [PROJECT_STATUS.md](PROJECT_STATUS.md).** Pipeline design → [PIPELINE.md](PIPELINE.md).
 >
 > This project now spans **four languages** — English (`en`), Hindi (`hi`), Korean (`ko`),

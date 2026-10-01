@@ -40,15 +40,32 @@ def load(lang):
         return json.load(f)
 
 
+def load_annotations(lang):
+    """Research annotations (id -> {manipulation_tactics, requested_action,
+    compliance_level}); {} if not yet labelled. See scripts/label_annotations.py."""
+    p = os.path.join(PROJ, "out", lang, "annotations.json")
+    if not os.path.exists(p):
+        return {}
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def write_jsonl(rows, lang, root):
     outdir = os.path.join(root, "data", lang)
     os.makedirs(outdir, exist_ok=True)
     path = os.path.join(outdir, "train.jsonl")
+    annots = load_annotations(lang)
     with open(path, "w", encoding="utf-8") as f:
         for r in rows:
             rec = dict(r)
             # forward-compatible pointer to the (later-uploaded) audio clip
             rec["audio_file"] = f"audio/{lang}/{r['id']}.mp3"
+            # second taxonomy + unsafe-ask + outcome (if labelled)
+            a = annots.get(r["id"])
+            if a:
+                rec["manipulation_tactics"] = a.get("manipulation_tactics")
+                rec["requested_action"] = a.get("requested_action")
+                rec["compliance_level"] = a.get("compliance_level")
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     return path
 
