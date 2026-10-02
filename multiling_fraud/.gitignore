@@ -1,0 +1,15 @@
+# HF staging tree: large generated JSONL/audio — rebuild via scripts/build_hf_dataset.py
+hf_dataset/data/
+hf_dataset/audio/*/
+hf_dataset/preferences/*/
+# keep the card + placeholders
+!hf_dataset/README.md
+!hf_dataset/audio/README.md
+!hf_dataset/preferences/README.md
+
+# generation intermediates
+out/*/dialogues_raw.json
+out/*/pool.json
+out/*/round_*.json
+__pycache__/
+*.pyc
