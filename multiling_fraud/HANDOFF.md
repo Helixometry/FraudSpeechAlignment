@@ -2,8 +2,9 @@
 
 Single-page context + resume guide for continuing this project on a different machine
 (moving because the current cluster's 80 GB GPUs are backed up for ~a day). Read this
-first; deeper docs: **[SETUP.md](SETUP.md)** (full env/pipeline), **[PIPELINE.md](PIPELINE.md)**
-(design), **[PROJECT_STATUS.md](PROJECT_STATUS.md)** (state).
+first; deeper docs: **[SETUP.md](SETUP.md)** (full env/pipeline), **[DATASET_METHODOLOGY.md](DATASET_METHODOLOGY.md)**
+(exactly how the dialogues + audio were created), **[PIPELINE.md](PIPELINE.md)** (design),
+**[PROJECT_STATUS.md](PROJECT_STATUS.md)** (state).
 
 ---
 
