@@ -118,7 +118,29 @@ Each row is one dialogue:
 | `scene` / `scene_confidence` / `scene_reason` | string/float/string | scenario |
 | `think` | string | model's reasoning trace |
 | `caller_gender` / `callee_gender` | string | speaker genders (for TTS voices) |
-| `audio_file` | string | relative path to the clip: `audio/{lang}/{id}.mp3` (Phase 2) |
+| `audio_file` | string | relative path to the clip: `audio/{lang}/{id}.mp3` |
+| `manipulation_tactics` | object | 7 binary flags (see below) — *how* the victim is influenced |
+| `requested_action` | string | the concrete unsafe ask the caller pushes for |
+| `compliance_level` | string | `full` / `partial` / `none` — how far the victim complied |
+
+## Two taxonomies (for `P(unsafe behavior | manipulation strategy)`)
+
+Every row carries **both** axes:
+
+1. **Fraud outcome — *what* the attack is:** `fraud_type_key` (the 7 types above).
+2. **Manipulation mechanism — *how* the victim is influenced:** `manipulation_tactics`,
+   a binary 0/1 object over
+   `authority, urgency, fear, affinity, reward, isolation, credential_request`
+   (multi-label — a call typically uses several). Plus `requested_action`
+   (`otp_or_verification_code`, `password_or_pin`, `card_or_bank_details`,
+   `personal_identity_info`, `install_app_or_remote_access`, `transfer_or_pay_money`,
+   `buy_gift_cards_or_vouchers`, `click_link_or_visit_site`, `other`, `none`) and
+   `compliance_level` (`full`/`partial`/`none`).
+
+These were labelled by the same model (`Qwen2.5-72B-Instruct-AWQ`, greedy) from each
+transcript. Validation confirms sensible structure — e.g. `reward` concentrates in
+investment/lottery, `fear`+`isolation` in kidnapping, `credential_request` in
+bank/phishing.
 
 ## Configs
 
